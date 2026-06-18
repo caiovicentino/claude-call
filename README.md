@@ -55,6 +55,32 @@ This installs everything — uv, ffmpeg, whisper.cpp, portaudio, the repo, a spe
 
 You still need **[Claude Code](https://docs.claude.com/claude-code)** installed and logged in (it's the brain — no API key). macOS also needs [Homebrew](https://brew.sh). Prefer to do it by hand? Follow the step-by-step below.
 
+## Windows (native, no WSL)
+Works natively on Windows — same brain, your real Windows Claude Code sessions (no WSL, so it resumes the sessions under `%USERPROFILE%\.claude`, not a Linux copy). It uses **[scoop](https://scoop.sh)** for the native deps instead of brew/apt.
+
+```powershell
+# 1. one-time deps (scoop is user-level, no admin)
+scoop install uv ffmpeg whisper-cpp        # whisper-cpp ships whisper-server.exe + whisper-cli.exe
+
+# 2. get claude-call + install
+git clone https://github.com/caiovicentino/claude-call
+cd claude-call
+.\install.ps1        # uv sync, downloads a whisper model, registers a `claude-call` command, runs doctor
+```
+
+Then, from any project you've used with Claude Code:
+```powershell
+cd C:\my-project
+claude-call          # config:  claude-call config   ·   check:  claude-call doctor
+```
+
+Notes for Windows:
+- **Entry points are PowerShell**: `call.ps1` / `install.ps1` (the `.sh` scripts are macOS/Linux). `install.ps1` drops a `claude-call.cmd` shim into your scoop shims dir (already on `PATH`).
+- **Python 3.12** is fetched automatically by `uv` (3.13+ removed `audioop`). PyAudio installs from a prebuilt wheel — no portaudio build needed.
+- **STT speed**: the scoop whisper.cpp is a CPU build. If `small` feels slow on your machine, switch to a lighter model: `.\scripts\download-model.ps1 base` then set `CALL_WHISPER_MODEL=%USERPROFILE%\.cache\whisper\ggml-base.bin` in `.env`.
+- **Ctrl+C** ends the call (the macOS hardware AEC / `CALL_AEC` is macOS-only and simply ignored here).
+- **Security**: the default `CALL_PERMISSION=--dangerously-skip-permissions` lets the agent run bash/edits **without asking** — extra worth noting on your main Windows box. To be prompted instead, set `CALL_PERMISSION=--permission-mode default` in `.env` (the call stalls on a prompt, since voice can't answer it). See [Security](#security-).
+
 ## Step-by-step (from zero)
 
 ### 1. Install the prerequisites

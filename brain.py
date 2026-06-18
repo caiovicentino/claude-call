@@ -17,6 +17,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import time
 import uuid
 
@@ -51,7 +52,10 @@ def _clean_for_speech(s: str) -> str:
     s = re.sub(r"[*_~#>|]+", "", s)
     s = re.sub(r"^\s*[-•·]\s*", "", s)
     s = _EMOJI.sub("", s)
-    return re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    # Fragmentos so de pontuacao ("--", "...", "|") fazem o edge-tts retornar "no audio"
+    # e engasgam a fala — pula se nao sobrou nada falavel (sem letra/numero).
+    return s if re.search(r"[^\W_]", s) else ""
 
 
 class ClaudeBrain(FrameProcessor):
@@ -223,11 +227,18 @@ class ClaudeBrain(FrameProcessor):
         return buf, sents
 
     def _kill(self):
-        if self._proc and self._proc.returncode is None:
-            try:
+        if not (self._proc and self._proc.returncode is None):
+            return
+        try:
+            if os.name == "nt":
+                # Windows nao tem process groups/SIGKILL — derruba a arvore via taskkill
+                # (o `claude` CLI roda em Node e pode ter filhos; /T pega todos).
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(self._proc.pid)],
+                               capture_output=True)
+            else:
                 os.killpg(os.getpgid(self._proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, OSError):
-                pass
+        except (ProcessLookupError, OSError):
+            pass
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)

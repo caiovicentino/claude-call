@@ -8,6 +8,7 @@ Cerebro = `claude` CLI ja autenticado (sua assinatura). Nao precisa de API key.
 Rodar:  ./call.sh   (ou: uv run python call.py)
 """
 import asyncio
+import os
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -96,10 +97,22 @@ async def main():
     ), **idle_kwargs)
     await task.queue_frames([TTSSpeakFrame(C.GREETING)])
 
-    runner = PipelineRunner(handle_sigint=True)
+    # No Windows (Proactor loop) add_signal_handler nao existe — o handle_sigint do
+    # pipecat quebraria no start. Desligamos ele e tratamos o Ctrl+C na mao: cancela a
+    # pipeline graciosamente (senao o KeyboardInterrupt deixa o shutdown sujo).
+    runner = PipelineRunner(handle_sigint=(os.name != "nt"))
+    if os.name == "nt":
+        import signal
+        loop = asyncio.get_running_loop()
+        def _on_sigint(*_):
+            loop.call_soon_threadsafe(lambda: loop.create_task(task.cancel(reason="Ctrl+C")))
+        signal.signal(signal.SIGINT, _on_sigint)
     logger.info(f"claude-call no ar — voz={C.VOICE}, lang={C.LANG}, modelo={C.MODEL or 'default'}")
     await runner.run(task)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
